@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using Sketchimo.Models;
 using UnityEngine;
@@ -77,9 +78,9 @@ public class SketchimoCore : MonoBehaviour
     public void DeprojectSketchTrajectory2Dto3D()
     {
         var selectedJointPosition = charModel.selectedBone.transform.position;
-
-        var depth = Vector3.Distance(selectedJointPosition, cameraModel.cam.transform.position);
-
+        var selectedJointPositionZ = Vector3.Dot(selectedJointPosition, cameraModel.cam.transform.forward);
+        var camPositionZ = Vector3.Dot(cameraModel.cam.transform.position, cameraModel.cam.transform.forward);
+        var depth = Math.Abs(selectedJointPositionZ - camPositionZ);
 
         var sketchTrajectory3D = new Vector3[sketchModel.GetSketchTrajectory2DNum()];
 
