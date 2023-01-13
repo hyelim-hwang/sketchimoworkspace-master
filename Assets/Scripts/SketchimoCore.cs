@@ -292,29 +292,32 @@ public class SketchimoCore : MonoBehaviour
         var currentPose = motionModel.motion.data[currentFrame];
         var originalPose = new PoseData(currentPose);
 
+        var frontRootIdx = 0;
+        var backRootIdx = 0;
+
         //find out Front root joint
         for (var selectedJointIdx = 0; selectedJointIdx < selectedJointsNum; ++selectedJointIdx)
         {
-            var selectedBone = charModel.GetBoneAt(selectedJointsIdxes[selectedJointIdx]);
+            var selectedBone = charModel.GetBoneAt(selectedJointsIdxes[selectedJointIdx]); 
             if (selectedBone.transform.name == "mixamorig:RightHand" || selectedBone.transform.name == "mixamorig:LeftHand" ||
                     selectedBone.transform.name == "left_wrist" || selectedBone.transform.name == "right_wrist")
                 continue;
-            if (charModel.GetNumOfChild(selectedBone) > 1)
-            {
+            if (charModel.GetNumOfChild(selectedBone) > 1 && selectedBone.name != "pelvis")
+                {
                 frontRootJointIdx = selectedJointIdx - 1;
                 break;
             }
         }
 
         //find out Back root joint
-        for (var selectedJointIdx = selectedJointsNum - 1; selectedJointIdx >= 0; --selectedJointIdx)
+        for (var selectedJointIdx = selectedJointsNum - 2; selectedJointIdx >= 0; --selectedJointIdx)
         {
             var selectedBoneName = charModel.GetBoneAt(selectedJointsIdxes[selectedJointIdx]);
             if (selectedBoneName.transform.name == "mixamorig:RightHand" || selectedBoneName.transform.name == "mixamorig:LeftHand" ||
                         selectedBoneName.transform.name == "left_wrist" || selectedBoneName.transform.name == "right_wrist")
                 continue;
-            if (charModel.GetNumOfChild(selectedBoneName) > 1)
-            {
+            if (charModel.GetNumOfChild(selectedBoneName) > 1) // && selectedBoneName.transform.name != "pelvis"
+                {
                 backRootJointIdx = selectedJointIdx + 1;
                 break;
             }
@@ -326,24 +329,44 @@ public class SketchimoCore : MonoBehaviour
             frontRootJointIdx = selectedJointsIdxes[0] < selectedJointsIdxes.Last() ? 0 : selectedJointsIdxes.Count - 1;
             backRootJointIdx = frontRootJointIdx;
         }
-
-        var frontRootIdx = selectedJointsIdxes[frontRootJointIdx];
-        var backRootIdx = selectedJointsIdxes[backRootJointIdx];
+        int selectedJointIdxesNum = selectedJointsIdxes.Count();
+        if (frontRootJointIdx < 0)
+            {
+                frontRootJointIdx += selectedJointIdxesNum;
+            }
+        frontRootIdx = selectedJointsIdxes[frontRootJointIdx];
+        backRootIdx = selectedJointsIdxes[backRootJointIdx];
 
         // Change current pose
-        for (var jointIdx = frontRootJointIdx - 1; jointIdx > 0; --jointIdx) // =
-            {
-            var selectedJointIdx = selectedJointsIdxes[jointIdx];
-            var targetWorldPosition = sketchTrajectory[jointIdx];
-            InverseKinematics(currentFrame, frontRootIdx, selectedJointIdx, targetWorldPosition);
-        }
-
-        // TODO: 카메라 to screen depth 때문에 역방향 ik가 이상하게 풀리고 있음
-        for (var jointIdx = backRootJointIdx + 1; jointIdx < selectedJointsNum; ++jointIdx)
+        // 2. indside -> outside 
+        for (var jointIdx = frontRootJointIdx; jointIdx >= 0; --jointIdx) //  - 1
         {
             var selectedJointIdx = selectedJointsIdxes[jointIdx];
             var targetWorldPosition = sketchTrajectory[jointIdx];
-            InverseKinematics(currentFrame, backRootIdx, selectedJointIdx, targetWorldPosition);
+
+            // update front root joint
+            int root = frontRootIdx;
+            if (selectedJointsIdxes[0] < selectedJointsIdxes.Last())
+            {
+                root = selectedJointsIdxes[0];
+            }
+            InverseKinematics(currentFrame, root, selectedJointIdx, targetWorldPosition);
+        }
+
+        // TODO: 카메라 to screen depth 때문에 역방향 ik가 이상하게 풀리고 있음
+        // 1. outside -> inside update 
+        for (var jointIdx = backRootJointIdx; jointIdx < selectedJointsNum; ++jointIdx)
+        {
+            var selectedJointIdx = selectedJointsIdxes[jointIdx];
+            var targetWorldPosition = sketchTrajectory[jointIdx];
+                            
+            // update parent 
+            int root = backRootIdx;
+            if (selectedJointsIdxes[0] > selectedJointsIdxes.Last())
+            {
+                root = selectedJointsIdxes.Last();
+            }
+            InverseKinematics(currentFrame, root, selectedJointIdx, targetWorldPosition);
         }
 
         charModel.SetPose(currentPose);
@@ -352,6 +375,8 @@ public class SketchimoCore : MonoBehaviour
         for (var i = 0; i < selectedJointsNum; ++i)
         {
             var jointIdx = selectedJointsIdxes[i];
+            if (jointIdx == 0)
+                continue;
             var originalRotation = originalPose.GetLocalRotationOf(jointIdx);
             var newRotation = currentPose.GetLocalRotationOf(jointIdx);
             var diff = newRotation * Quaternion.Inverse(originalRotation);
@@ -605,6 +630,8 @@ public class SketchimoCore : MonoBehaviour
 
             distance = Vector3.Distance(currentPositions[JointIndex], TargetPosition);
         }
+
+
 
         // motionModel.motion.data[Frame] = pose;
     }
