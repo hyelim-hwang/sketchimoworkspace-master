@@ -77,22 +77,24 @@ public class SketchimoCore : MonoBehaviour
 
     public void DeprojectSketchTrajectory2Dto3D()
     {
-        var selectedJointPosition = charModel.selectedBone.transform.position;
-        var selectedJointPositionZ = Vector3.Dot(selectedJointPosition, cameraModel.cam.transform.forward);
-        var camPositionZ = Vector3.Dot(cameraModel.cam.transform.position, cameraModel.cam.transform.forward);
-        var depth = Math.Abs(selectedJointPositionZ - camPositionZ);
+        //선택된 모든 joint들에 따로따로 거리 풀고 유지해서 적용 
+            var selectedJointPosition = charModel.selectedBone.transform.position;
+            var selectedJointPositionProjected = Vector3.Dot(selectedJointPosition, cameraModel.cam.transform.forward);
+            var camPositionProjected = Vector3.Dot(cameraModel.cam.transform.position, cameraModel.cam.transform.forward);
 
-        var sketchTrajectory3D = new Vector3[sketchModel.GetSketchTrajectory2DNum()];
+            var depth = Math.Abs(selectedJointPositionProjected - camPositionProjected);
 
-        for (int i = 0; i < sketchTrajectory3D.Length; i++)
-        {
-            var screenPoint = sketchModel.sketchTrajectory2D[i];
-            var screenPointWithDepth = new Vector3(screenPoint.x, screenPoint.y, depth);
+            var sketchTrajectory3D = new Vector3[sketchModel.GetSketchTrajectory2DNum()];
 
-            sketchTrajectory3D[i] = cameraModel.cam.ScreenToWorldPoint(screenPointWithDepth);
-        }
+            for (int i = 0; i < sketchTrajectory3D.Length; i++)
+            {
+                var screenPoint = sketchModel.sketchTrajectory2D[i];
+                var screenPointWithDepth = new Vector3(screenPoint.x, screenPoint.y, depth);
 
-        sketchModel.sketchTrajectory3D = sketchTrajectory3D.ToList();
+                sketchTrajectory3D[i] = cameraModel.cam.ScreenToWorldPoint(screenPointWithDepth);
+            }
+
+            sketchModel.sketchTrajectory3D = sketchTrajectory3D.ToList();
     }
 
     public void RetrieveTrajectory3D()
@@ -316,7 +318,7 @@ public class SketchimoCore : MonoBehaviour
             if (selectedBoneName.transform.name == "mixamorig:RightHand" || selectedBoneName.transform.name == "mixamorig:LeftHand" ||
                         selectedBoneName.transform.name == "left_wrist" || selectedBoneName.transform.name == "right_wrist")
                 continue;
-            if (charModel.GetNumOfChild(selectedBoneName) > 1) // && selectedBoneName.transform.name != "pelvis"
+            if (charModel.GetNumOfChild(selectedBoneName) > 1 && selectedBoneName.transform.name != "pelvis")
                 {
                 backRootJointIdx = selectedJointIdx + 1;
                 break;
@@ -324,7 +326,7 @@ public class SketchimoCore : MonoBehaviour
         }
 
         // Set the smallest index to root if hadn't find any root.
-        if (frontRootJointIdx == 0 && backRootJointIdx == selectedJointsNum - 1)
+        if (frontRootJointIdx == 0 && backRootJointIdx == selectedJointsNum - 1) //update 안 된 initial값일 경우 
         {
             frontRootJointIdx = selectedJointsIdxes[0] < selectedJointsIdxes.Last() ? 0 : selectedJointsIdxes.Count - 1;
             backRootJointIdx = frontRootJointIdx;
@@ -334,11 +336,12 @@ public class SketchimoCore : MonoBehaviour
             {
                 frontRootJointIdx += selectedJointIdxesNum;
             }
+
+        //frontRootIdx, backRootIdx 결정 
         frontRootIdx = selectedJointsIdxes[frontRootJointIdx];
-        backRootIdx = selectedJointsIdxes[backRootJointIdx];
+        backRootIdx = selectedJointsIdxes[backRootJointIdx]; 
 
         // Change current pose
-        // 2. indside -> outside 
         for (var jointIdx = frontRootJointIdx; jointIdx >= 0; --jointIdx) //  - 1
         {
             var selectedJointIdx = selectedJointsIdxes[jointIdx];
@@ -346,15 +349,15 @@ public class SketchimoCore : MonoBehaviour
 
             // update front root joint
             int root = frontRootIdx;
+            // 1. indside -> outside update
             if (selectedJointsIdxes[0] < selectedJointsIdxes.Last())
             {
-                root = selectedJointsIdxes[0];
-            }
+                root = selectedJointsIdxes[0]; //???
+            } 
             InverseKinematics(currentFrame, root, selectedJointIdx, targetWorldPosition);
         }
 
         // TODO: 카메라 to screen depth 때문에 역방향 ik가 이상하게 풀리고 있음
-        // 1. outside -> inside update 
         for (var jointIdx = backRootJointIdx; jointIdx < selectedJointsNum; ++jointIdx)
         {
             var selectedJointIdx = selectedJointsIdxes[jointIdx];
@@ -362,11 +365,14 @@ public class SketchimoCore : MonoBehaviour
                             
             // update parent 
             int root = backRootIdx;
+            //outside->inside로 select한 경우
             if (selectedJointsIdxes[0] > selectedJointsIdxes.Last())
             {
-                root = selectedJointsIdxes.Last();
+                //root는 가장 안쪽의 joint
+                root = selectedJointsIdxes.Last(); //???
             }
-            InverseKinematics(currentFrame, root, selectedJointIdx, targetWorldPosition);
+
+                InverseKinematics(currentFrame, root, selectedJointIdx, targetWorldPosition);
         }
 
         charModel.SetPose(currentPose);
@@ -596,6 +602,7 @@ public class SketchimoCore : MonoBehaviour
             Debug.LogWarning("TipBoneName is NOT a child of RootBoneName");
             return;
         }
+        
 
         // solve
         const float precision = 0.01f;
@@ -603,12 +610,16 @@ public class SketchimoCore : MonoBehaviour
         var iterationCount = 0;
         var distance = Vector3.Distance(currentPositions[JointIndex], TargetPosition);
 
-        while (distance > precision && iterationCount++ < maxIterations)
+        while (distance > precision && iterationCount++ < maxIterations && ikChain.Count > 0) //ik chain의 길이가 0보다 클 때 UPDATE 
         {
             foreach (var currentBone in ikChain)
             {
                 var eePosition = currentPositions[JointIndex];
                 var parentBoneIndex = charModel.GetIndexOf(currentBone.transform.parent.gameObject);
+                if (parentBoneIndex == 0)
+                    {
+                        continue;
+                    }
 
                 var parentBonePosition = currentPositions[parentBoneIndex];
                 var toEE = (eePosition - parentBonePosition).normalized;
