@@ -74,26 +74,39 @@ public class SketchimoCore : MonoBehaviour
         sketchModel.sketchTrajectory2D = interpolatedSketchTrajectory2D.ToList();
     }
 
+    public void RefineSketchTrajectory2D(int trajectoryNum)
+    {
+        var sketchTrajectory2DNum = sketchModel.GetSketchTrajectory2DNum();
+
+        // interpolate sketch trajectory
+        var interval = sketchTrajectory2DNum / trajectoryNum;
+
+        Vector2[] interpolatedSketchTrajectory2D = new Vector2[trajectoryNum];
+
+        for (int i = 0; i < trajectoryNum; i++)
+            interpolatedSketchTrajectory2D[i] = sketchModel.sketchTrajectory2D[i * interval];
+
+        sketchModel.sketchTrajectory2D = interpolatedSketchTrajectory2D.ToList();
+    }
+
 
     public void DeprojectSketchTrajectory2Dto3D()
     {
-        //char model에서 selected joint의 original index list를 불러옴 
-        //sketchTrajectory3D: sketchTrajectory2D에 depth 포함하게 전환
+        var selectedJointPosition = charModel.selectedBone.transform.position;
+
+        var depth = Vector3.Distance(selectedJointPosition, cameraModel.cam.transform.position);
+
+
         var sketchTrajectory3D = new Vector3[sketchModel.GetSketchTrajectory2DNum()];
 
         for (int i = 0; i < sketchTrajectory3D.Length; i++)
         {
-            var selectedJointsIdxes = charModel.GetSelectedChainIdxes();
             var screenPoint = sketchModel.sketchTrajectory2D[i];
-            //이곳의 depth가 고정된 것이 문제-> trajectrory3D의 depth가 vary해야함-
-            //var selectedJointPosition = charModel.selectedBone.transform.position;
-            var selectedJointPosition = charModel.GetBoneAt(selectedJointsIdxes[i]).transform.position;
-            var selectedJointPositionZ = Vector3.Dot(selectedJointPosition, cameraModel.cam.transform.forward);
-            var camPositionZ = Vector3.Dot(cameraModel.cam.transform.position, cameraModel.cam.transform.forward);
-            var depth = Math.Abs(selectedJointPositionZ - camPositionZ);
-            var screenPointWithDepth = new Vector3(screenPoint.x, screenPoint.y, depth);//이쪽 depth가 i마다 달라져야 
+            var screenPointWithDepth = new Vector3(screenPoint.x, screenPoint.y, depth);
+
             sketchTrajectory3D[i] = cameraModel.cam.ScreenToWorldPoint(screenPointWithDepth);
         }
+
         sketchModel.sketchTrajectory3D = sketchTrajectory3D.ToList();
     }
 
